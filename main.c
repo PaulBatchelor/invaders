@@ -94,6 +94,12 @@ static char tank_bits[] = {
 #define BROOD_SIZE 12
 #define BROOD_PADDING 6
 
+/* should be at least half of ship */
+#define WINDOW_PADDING 8
+
+/* debugging */
+#define BOUNDING_BOX 0
+
 SDL_Window *window = NULL;
 SDL_Renderer *renderer = NULL;
 
@@ -281,19 +287,19 @@ void update(double dt)
         brood_xoff += brood_speed*brood_direction;
 
         brood_width = brood_max_x - brood_min_x;
-        xstart = brood_xoff + brood_min_x;
+        xstart = brood_xoff + brood_min_x + WINDOW_PADDING;
 
-        if (xstart <= 0 || (xstart + brood_width) > WINDOW_WIDTH) {
+        if (xstart <= WINDOW_PADDING || (xstart + brood_width + WINDOW_PADDING) > WINDOW_WIDTH) {
             brood_direction *= -1;
             brood_yoff += 4;
 
             /* wrap-around x-offset for brood */
-            while (xstart < 0) {
+            while (xstart < WINDOW_PADDING) {
                 brood_xoff += brood_speed*brood_direction;
-                xstart = brood_xoff + brood_min_x;
+                xstart = brood_xoff + brood_min_x + WINDOW_PADDING;
             }
 
-            while ((xstart + brood_width) >= WINDOW_WIDTH) {
+            while ((xstart + brood_width + WINDOW_PADDING) >= WINDOW_WIDTH) {
                 brood_xoff += brood_speed*brood_direction;
                 xstart = brood_xoff + brood_min_x;
             }
@@ -441,18 +447,20 @@ void draw(double dt)
                 } else {
                     enemy = enemy1_bits;
                 }
-                draw_enemy(brood_xoff + x*(BROOD_SIZE + BROOD_PADDING),
-                        16 + brood_yoff + y*(BROOD_SIZE + BROOD_PADDING),
-                        enemy);
+                draw_enemy(
+                    brood_xoff + WINDOW_PADDING + x*(BROOD_SIZE + BROOD_PADDING),
+                    16 + brood_yoff + y*(BROOD_SIZE + BROOD_PADDING),
+                    enemy);
             }
         }
     }
 
-#if 0
-    draw_rect(brood_xoff+ brood_min_x,
+#if BOUNDING_BOX
+    draw_rect(brood_xoff + brood_min_x + WINDOW_PADDING,
               brood_yoff + 16,
               brood_max_x - brood_min_x,
               brood_max_y);
+    draw_vline((ship_pos + ZOOM*16)/ZOOM, 0, WINDOW_HEIGHT);
 #endif
 
     /* Copy + scale to screen back buffer */
