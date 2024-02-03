@@ -119,8 +119,9 @@ double counter_max = 0.75;
 int brood_xoff = 0;
 int brood_yoff = 0;
 int score = 0;
-int brood_max_x = (BROOD_SIZE*11 + BROOD_PADDING*10);
+int brood_max_x = BROOD_SIZE*11 + BROOD_PADDING*10;
 int brood_max_y = BROOD_SIZE*5 + BROOD_PADDING*4;
+int brood_min_x = 0;
 
 int brood_speed = 4;
 int brood_direction = 1;
@@ -200,7 +201,7 @@ int is_alive(int x, int y)
 void update(double dt)
 {
     int x, y;
-    int max_x, max_y;
+    int max_x, max_y, min_x;
     int last_x, last_y;
     int nalive;
 
@@ -210,7 +211,6 @@ void update(double dt)
     velocity = velocity - (velocity*0.9*dt);
 
     if (gameover) velocity = 0;
-    
 
     /* bounce off walls */
 
@@ -227,28 +227,33 @@ void update(double dt)
     max_x = -1;
     max_y = -1;
     nalive = 0;
+    min_x = 9999;
+
     for (y = 0; y < 5; y++) {
-        last_x = 0;
+        last_x = -1;
         last_y =
-            (y + 1) * BROOD_SIZE + 
+            (y + 1) * BROOD_SIZE +
             y * BROOD_PADDING;
         for (x = 0; x < 11; x++) {
             if (is_alive(x, y)) {
                 nalive++;
                 last_x =
-                    (x + 1) * BROOD_SIZE + 
+                    (x + 1) * BROOD_SIZE +
                     x * BROOD_PADDING;
+                last_x = x;
             }
+            if (last_x >= 0 && last_x < min_x) min_x = last_x;
         }
 
-        if (last_x > 0 && last_y > max_y) {
+        if (last_x >= 0 && last_y > max_y) {
             max_y = last_y;
         }
 
         if (last_x > max_x) max_x = last_x;
     }
 
-    brood_max_x = max_x;
+    brood_max_x = (max_x + 1)*BROOD_SIZE + max_x*BROOD_PADDING;
+    brood_min_x = min_x*(BROOD_SIZE + BROOD_PADDING);
     brood_max_y = max_y;
 
     /* update urgency of enemy attack based on how many are alive */
@@ -257,10 +262,10 @@ void update(double dt)
         counter_max = 0.1;
         brood_speed = 10;
     } else if (nalive < 27) {
-        counter_max = 0.75;
+        counter_max = 0.5;
         brood_speed = 6;
     } else {
-        counter_max = 0.95;
+        counter_max = 0.75;
         brood_speed = 4;
     }
 
@@ -270,12 +275,28 @@ void update(double dt)
     }
 
     if (!gameover && counter > counter_max) {
+        int brood_width;
+        int xstart;
         counter = 0;
         brood_xoff += brood_speed*brood_direction;
 
-        if (brood_xoff < 0 || brood_xoff > (WINDOW_WIDTH_PADDED - brood_max_x)) {
+        brood_width = brood_max_x - brood_min_x;
+        xstart = brood_xoff + brood_min_x;
+
+        if (xstart <= 0 || (xstart + brood_width) > WINDOW_WIDTH) {
             brood_direction *= -1;
             brood_yoff += 4;
+
+            /* wrap-around x-offset for brood */
+            while (xstart < 0) {
+                brood_xoff += brood_speed*brood_direction;
+                xstart = brood_xoff + brood_min_x;
+            }
+
+            while ((xstart + brood_width) >= WINDOW_WIDTH) {
+                brood_xoff += brood_speed*brood_direction;
+                xstart = brood_xoff + brood_min_x;
+            }
         }
 
         if (brood_yoff + brood_max_y > brood_touchdown) {
@@ -293,6 +314,28 @@ void set_pixel(int x, int y, int s)
     pos = (y*WINDOW_WIDTH + x);
 
     screen[pos] = s;
+}
+
+void draw_hline (int xpos, int ypos, int len)
+{
+    int x;
+    for (x = 0; x < len; x++) set_pixel(xpos + x, ypos, 0xFF);
+}
+
+void draw_vline (int xpos, int ypos, int len)
+{
+    int y;
+    for (y = 0; y < len; y++) set_pixel(xpos, ypos + y, 0xFF);
+}
+
+void draw_rect(int xpos, int ypos, int w, int h)
+{
+    int x, y;
+
+    draw_hline(xpos, ypos, w);
+    draw_hline(xpos, ypos + h, w);
+    draw_vline(xpos, ypos, h);
+    draw_vline(xpos + w, ypos, h);
 }
 
 void draw_enemy(int xpos, int ypos, const char *enemy)
@@ -385,6 +428,7 @@ void draw(double dt)
         draw_text("GAME OVER", (WINDOW_WIDTH - 9*8)/2, WINDOW_HEIGHT/2);
     }
 
+
     for (y = 0; y < 5; y++) {
         for (x = 0; x < 11; x++) {
             const char *enemy;
@@ -397,12 +441,19 @@ void draw(double dt)
                 } else {
                     enemy = enemy1_bits;
                 }
-                draw_enemy(brood_xoff + 8 + x * (12 + 6),
-                        16 + brood_yoff + y*(12 + 6),
+                draw_enemy(brood_xoff + x*(BROOD_SIZE + BROOD_PADDING),
+                        16 + brood_yoff + y*(BROOD_SIZE + BROOD_PADDING),
                         enemy);
             }
         }
     }
+
+#if 0
+    draw_rect(brood_xoff+ brood_min_x,
+              brood_yoff + 16,
+              brood_max_x - brood_min_x,
+              brood_max_y);
+#endif
 
     /* Copy + scale to screen back buffer */
     for (y = 0; y < WINDOW_HEIGHT; y++) {
@@ -575,7 +626,7 @@ int main(int argc, char *argv[])
 
     now = now_sec();
     then = now;
-    while(running) {
+    while (running) {
         double dt;
         now = now_sec();
         dt = now - then;
