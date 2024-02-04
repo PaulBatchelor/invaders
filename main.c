@@ -6,6 +6,8 @@
 #include <string.h>
 #include <sys/time.h>
 
+/* Bitmaps */
+
 #define font_width 128
 #define font_height 32
 static char font_bits[] = {
@@ -122,17 +124,35 @@ double velocity = 0;
 double counter = 0;
 double counter_max = 0.75;
 
+/* Brood offset onscreen */
+
 int brood_xoff = 0;
 int brood_yoff = 0;
+
 int score = 0;
+
+/* max/min x coordinates used to determine when to change
+ * direction
+ */
 int brood_max_x = BROOD_SIZE*11 + BROOD_PADDING*10;
-int brood_max_y = BROOD_SIZE*5 + BROOD_PADDING*4;
 int brood_min_x = 0;
 
+/* Used to determine the bottom end of brood */
+int brood_max_y = BROOD_SIZE*5 + BROOD_PADDING*4;
+
+/* speed is abosolute value, direction
+ * toggles +/- and makes it a vector */
 int brood_speed = 4;
 int brood_direction = 1;
+
+/* how far to travel until game over? */
 int brood_touchdown = WINDOW_HEIGHT - 32 - 8;
+
 int gameover = 0;
+
+/* Keep track of alive status of each enemy using bits
+ * in 2 32-bit integers. 55 enemies fit in 64 bits
+ */
 uint32_t alive[2];
 
 void destroy(void)
@@ -283,13 +303,21 @@ void update(double dt)
     if (!gameover && counter > counter_max) {
         int brood_width;
         int xstart;
+        int intersection;
         counter = 0;
         brood_xoff += brood_speed*brood_direction;
 
         brood_width = brood_max_x - brood_min_x;
         xstart = brood_xoff + brood_min_x + WINDOW_PADDING;
 
-        if (xstart <= WINDOW_PADDING || (xstart + brood_width + WINDOW_PADDING) > WINDOW_WIDTH) {
+        /* if brood bounding box hits a wall, change direction */
+
+        intersection =
+            xstart <= WINDOW_PADDING ||
+            (xstart + brood_width + WINDOW_PADDING) >
+            WINDOW_WIDTH;
+
+        if (intersection) {
             brood_direction *= -1;
             brood_yoff += 4;
 
@@ -546,7 +574,10 @@ void draw(double dt)
             int pos;
             int c;
 
-            /* only ghost if the pixel is turning off */
+            /* only ghost if the pixel is turning off
+             * In other words, pixels will instantly
+             * turn on, but slowly turn off.
+             */
             pos = (y*WINDOW_WIDTH*ZOOM + x)*3;
             c = backbuf[pos];
             if (c == 0) {
@@ -560,7 +591,6 @@ void draw(double dt)
     SDL_UpdateTexture(texture, NULL, pixels, WINDOW_WIDTH*ZOOM*3);
 	SDL_RenderCopy(renderer, texture, NULL, &viewport);
 }
-
 
 void main_loop(double dt)
 {
