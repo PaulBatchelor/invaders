@@ -95,6 +95,7 @@ static char tank_bits[] = {
 #define GHOST_AMT 10
 #define BROOD_SIZE 12
 #define BROOD_PADDING 6
+#define MISSILE_SIZE 12
 
 /* should be at least half of ship */
 #define WINDOW_PADDING 8
@@ -155,6 +156,12 @@ int gameover = 0;
  */
 uint32_t alive[2];
 
+/* missiles */
+
+int missile_fired = 0;
+int missile_xpos = -1;
+int missile_ypos = -1;
+
 void destroy(void)
 {
     SDL_DestroyRenderer(renderer);
@@ -169,6 +176,12 @@ void fire(void)
 {
     /* TODO: implement fire */
     printf("fire!\n");
+
+    if (missile_fired == 0) {
+        missile_fired = 1;
+        missile_xpos = (int)(ship_pos/ZOOM) + 16 - 1;
+        missile_ypos = WINDOW_HEIGHT - 16 - MISSILE_SIZE - 10;
+    }
 }
 
 void process_event(SDL_Event *event, double dt)
@@ -223,6 +236,54 @@ int is_alive(int x, int y)
     return (alive[r] & (1 << pos)) > 0;
 }
 
+void kill_enemy(int x, int y)
+{
+    int r;
+    int pos;
+
+    pos = y * 11 + x;
+    r = 0;
+
+    if (pos >= 32) {
+        pos -= 32;
+        r = 1;
+    }
+
+    alive[r] &= ~(1 << pos);
+}
+
+
+int check_intersection(int xpos, int ypos)
+{
+    int hit;
+    int x, y;
+
+    hit = 0;
+
+    for (y = 0; y < 5; y++) {
+        for (x = 0; x < 11; x++) {
+            if (is_alive(x, y)) {
+                int e_x;
+                int e_y;
+
+                e_x = brood_xoff + WINDOW_PADDING + x*(BROOD_SIZE + BROOD_PADDING);
+                e_y = 16 + brood_yoff + y*(BROOD_SIZE + BROOD_PADDING);
+                if (xpos > e_x && xpos <= (e_x + BROOD_SIZE)) {
+                    if (ypos > e_y && ypos <= (e_y + BROOD_SIZE)) {
+                        hit = 1;
+                        kill_enemy(x, y);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (hit) break;
+    }
+
+    return hit;
+}
+
 
 void update(double dt)
 {
@@ -244,9 +305,32 @@ void update(double dt)
         velocity *= -1;
     }
 
-    /* TODO check if bullet hit enemies */
 
-    /* TODO update score if new enemy has been killed */
+    /* update missile position */
+    missile_ypos -= 300 * dt;
+
+    if (missile_ypos < 0) {
+        missile_fired = 0;
+    }
+
+    /* check if bullet hit enemies */
+
+    if (missile_fired) {
+        /* update score if new enemy has been killed */
+        int hit;
+
+        hit = check_intersection(missile_xpos, missile_ypos);
+
+        if (hit == 0) {
+            hit = check_intersection(missile_xpos + 1, missile_ypos);
+        }
+
+        if (hit) {
+            score += 10;
+            missile_fired = 0;
+        }
+    }
+
 
     /* update brood max coordinates */
 
@@ -432,20 +516,15 @@ void draw_text(const char *txt, int x, int y)
     }
 }
 
-void kill_enemy(int x, int y)
+void draw_missile(void)
 {
-    int r;
-    int pos;
+    int x, y;
 
-    pos = y * 11 + x;
-    r = 0;
-
-    if (pos >= 32) {
-        pos -= 32;
-        r = 1;
+    for (x = 0; x < 2; x++) {
+        for (y = 0; y < MISSILE_SIZE; y++) {
+            set_pixel(missile_xpos + x, missile_ypos + y, 0xFF);
+        }
     }
-
-    alive[r] &= ~(1 << pos);
 }
 
 void draw(double dt)
@@ -462,6 +541,8 @@ void draw(double dt)
         draw_text("GAME OVER", (WINDOW_WIDTH - 9*8)/2, WINDOW_HEIGHT/2);
     }
 
+
+    /* draw the brood */
 
     for (y = 0; y < 5; y++) {
         for (x = 0; x < 11; x++) {
@@ -482,6 +563,8 @@ void draw(double dt)
             }
         }
     }
+
+    if (missile_fired) draw_missile();
 
 #if BOUNDING_BOX
     draw_rect(brood_xoff + brood_min_x + WINDOW_PADDING,
